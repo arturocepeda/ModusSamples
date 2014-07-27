@@ -27,14 +27,19 @@ typedef MCSoundGenOpenAL MCSoundGenNative;
 typedef MCSoundGenOpenSL MCSoundGenNative;
 #endif
 
-class GEStateSampleThreads
+using namespace GE;
+using namespace GE::States;
+using namespace GE::Rendering;
+using namespace GE::Audio;
+
+class StateSampleThreads
 {
 public:
    static GEThreadFunction(LoadSamplesThread);
    static GEThreadFunction(MusicTimerThread);
 };
 
-class GEStateSampleCallbacks
+class StateSampleCallbacks
 {
 public:
    static void SampleLoaded(unsigned int TotalSamples, unsigned int Loaded, void* Data);
@@ -44,24 +49,24 @@ public:
    static void Damper(unsigned int Instrument, bool DamperState, void* Data);
 };
 
-class GEStateSample : public GEState
+class StateSample : public State
 {
 private:
    // sprites
-   GESprite* cSpriteUnused;
-   GESprite* cSpriteKeyWhite;
-   GESprite* cSpriteKeyBlack;
-   GESprite* cSpriteKeyPress;  
-   GESprite* cSpriteKeyPressBack;
-   GESprite* cSpritePedalOn;
-   GESprite* cSpritePedalOff;
-   GESprite* cSpritePedal;
-   GESprite* cSpriteLoading;
+   Sprite* cSpriteUnused;
+   Sprite* cSpriteKeyWhite;
+   Sprite* cSpriteKeyBlack;
+   Sprite* cSpriteKeyPress;  
+   Sprite* cSpriteKeyPressBack;
+   Sprite* cSpritePedalOn;
+   Sprite* cSpritePedalOff;
+   Sprite* cSpritePedal;
+   Sprite* cSpriteLoading;
    
    // labels
-   GELabel* cTextModus;
-   GELabel* cTextLoading;
-   GELabel* cTextPlaying;
+   Label* cTextModus;
+   Label* cTextLoading;
+   Label* cTextPlaying;
    
    // textures
    struct
@@ -69,9 +74,6 @@ private:
       enum {KeyWhite, KeyBlack, KeyPress, KeyPressBack, PedalOn, PedalOff, Loading};      
    } 
    Textures;
-   
-   // sound system
-   GEAudio* cAudio;
    
    // Modus objects
    MCInstrument* mPiano;
@@ -92,7 +94,7 @@ private:
    GEThread pLoadSamples;
    
 public:
-   GEStateSample(GERendering* Render, GEAudio* Audio, void* GlobalData);
+   StateSample(RenderSystem* Render, AudioSystem* Audio, void* GlobalData);
    
    void internalInit();
    void update(float DeltaTime);
@@ -106,7 +108,7 @@ public:
    void setIntensity(unsigned char Pitch, unsigned char Intensity);
    void setDamper(bool On);
    
-   void inputTouchBegin(int ID, const GEVector2& Point);
+   void inputTouchBegin(int ID, const Vector2& Point);
 };
 
 #endif

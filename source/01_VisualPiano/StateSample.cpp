@@ -18,6 +18,11 @@
 #include <sstream>
 
 
+using namespace GE::Core;
+using namespace GE::States;
+using namespace GE::Content;
+
+
 //
 //  global data
 //
@@ -28,32 +33,32 @@ bool bThreadEnd = false;
 
 
 //
-//  GEStateSampleThreads
+//  StateSampleThreads
 //
-GEThreadFunction(GEStateSampleThreads::LoadSamplesThread)
+GEThreadFunction(StateSampleThreads::LoadSamplesThread)
 {
-   GEStateSample* cState = (GEStateSample*)pData;
+   StateSample* cState = (StateSample*)pData;
    MCSoundGenAudio* mSoundGen = cState->getSoundGen();
 
-   GEContentData cSamplePackData;
-   GEDevice::readContentFile(GEContentType::GenericBinaryData, "instruments/Piano", "msp", &cSamplePackData);
+   ContentData cSamplePackData;
+   Device::readContentFile(ContentType::GenericBinaryData, "instruments/Piano", "msp", &cSamplePackData);
    std::istringstream fStream(std::string(cSamplePackData.getData(), cSamplePackData.getDataSize()));
-   mSoundGen->loadSamplePack(fStream, GEStateSampleCallbacks::SampleLoaded, pData);
+   mSoundGen->loadSamplePack(fStream, StateSampleCallbacks::SampleLoaded, pData);
    
-   GEInitMutex(pTimerMutex);
+   GEMutexInit(pTimerMutex);
    mTimer.start();
    bSamplesLoaded = true;
    
    return 0;
 }
 
-GEThreadFunction(GEStateSampleThreads::MusicTimerThread)
+GEThreadFunction(StateSampleThreads::MusicTimerThread)
 {
    while(!bThreadEnd)
    {
-      GELockMutex(pTimerMutex);
+      GEMutexLock(pTimerMutex);
       mTimer.update();
-      GEUnlockMutex(pTimerMutex);
+      GEMutexUnlock(pTimerMutex);
    }
    
    return 0;
@@ -61,53 +66,53 @@ GEThreadFunction(GEStateSampleThreads::MusicTimerThread)
 
 
 //
-//  GEStateSampleCallbacks
+//  StateSampleCallbacks
 //
-void GEStateSampleCallbacks::SampleLoaded(unsigned int TotalSamples, unsigned int Loaded, void* Data)
+void StateSampleCallbacks::SampleLoaded(unsigned int TotalSamples, unsigned int Loaded, void* Data)
 {
-   GEStateSample* cState = (GEStateSample*)Data;
+   StateSample* cState = (StateSample*)Data;
    cState->updateSamplesLoaded(TotalSamples, Loaded);
 }
 
-void GEStateSampleCallbacks::TimerTick(const MSTimePosition& TimePosition, void* Data)
+void StateSampleCallbacks::TimerTick(const MSTimePosition& TimePosition, void* Data)
 {
    MCInstrument* mPiano = (MCInstrument*)Data;
    mPiano->update(TimePosition);
 }
 
-void GEStateSampleCallbacks::PlayNote(unsigned int Instrument, const MSNote& Note, void* Data)
+void StateSampleCallbacks::PlayNote(unsigned int Instrument, const MSNote& Note, void* Data)
 {
-   GEStateSample* cState = (GEStateSample*)Data;   
+   StateSample* cState = (StateSample*)Data;   
    cState->setIntensity(Note.Pitch, Note.Intensity);
 }
 
-void GEStateSampleCallbacks::ReleaseNote(unsigned int Instrument, const MSNote& Note, void* Data)
+void StateSampleCallbacks::ReleaseNote(unsigned int Instrument, const MSNote& Note, void* Data)
 {
-   GEStateSample* cState = (GEStateSample*)Data;
+   StateSample* cState = (StateSample*)Data;
    cState->setIntensity(Note.Pitch, 0);
 }
 
-void GEStateSampleCallbacks::Damper(unsigned int Instrument, bool DamperState, void* Data)
+void StateSampleCallbacks::Damper(unsigned int Instrument, bool DamperState, void* Data)
 {
-   GEStateSample* cState = (GEStateSample*)Data;
+   StateSample* cState = (StateSample*)Data;
    cState->setDamper(DamperState);
 }
 
 
 //
-//  GEStateSample
+//  StateSample
 //
-GEStateSample::GEStateSample(GERendering* Render, GEAudio* Audio, void* GlobalData)
-    : GEState(Render, Audio, GlobalData)
+StateSample::StateSample(RenderSystem* Render, AudioSystem* Audio, void* GlobalData)
+    : State(Render, Audio, GlobalData)
 {
    // initialize piano status
    memset(iIntensity, 0, 88);
    bDamper = false;
 }
 
-void GEStateSample::internalInit()
+void StateSample::internalInit()
 {   
-   cRender->setBackgroundColor(GEColor(0.8f, 0.8f, 1.0f));
+   cRender->setBackgroundColor(Color(0.8f, 0.8f, 1.0f));
    cRender->set2D(false);
    
    iTotalSamples = 0;
@@ -142,25 +147,25 @@ void GEStateSample::internalInit()
 
    // labels
    cRender->defineFont(0, "Ostrich", 24.0f);
-   cRender->createLabel(&cTextModus, 0, GEAlignment::TopLeft, GEVector2(0.035f, 0.035f), "");
+   cRender->createLabel(&cTextModus, 0, Alignment::TopLeft, Vector2(0.035f, 0.035f), "");
    cTextModus->setHorizontalSpacing(0.15f);
-   cTextModus->setColor(GEColor(0.2f, 0.2f, 0.2f));
-   cRender->createLabel(&cTextLoading, 0, GEAlignment::TopLeft, GEVector2(0.035f, 0.035f), "");
+   cTextModus->setColor(Color(0.2f, 0.2f, 0.2f));
+   cRender->createLabel(&cTextLoading, 0, Alignment::TopLeft, Vector2(0.035f, 0.035f), "");
    cTextLoading->setHorizontalSpacing(0.15f);
-   cTextLoading->setColor(GEColor(0.2f, 0.2f, 0.2f));
-   cRender->createLabel(&cTextPlaying, 0, GEAlignment::TopLeft, GEVector2(0.035f, 0.035f),
+   cTextLoading->setColor(Color(0.2f, 0.2f, 0.2f));
+   cRender->createLabel(&cTextPlaying, 0, Alignment::TopLeft, Vector2(0.035f, 0.035f),
       "Playing! Touch the screen to change the piece...");
    cTextPlaying->setHorizontalSpacing(0.15f);
-   cTextPlaying->setColor(GEColor(0.2f, 0.2f, 0.2f));
+   cTextPlaying->setColor(Color(0.2f, 0.2f, 0.2f));
    
    // setup sizes and positions
-   cSpriteKeyWhite->setSize(GEVector2(0.2f, 0.2f));
-   cSpriteKeyBlack->setSize(GEVector2(0.2f, 0.2f));
-   cSpriteKeyPress->setSize(GEVector2(0.2f, 0.2f));
-   cSpriteKeyPressBack->setSize(GEVector2(0.2f, 0.2f));
-   cSpritePedalOn->setSize(GEVector2(0.2f, 0.2f));
-   cSpritePedalOff->setSize(GEVector2(0.2f, 0.2f));
-   cSpriteLoading->setSize(GEVector2(0.125f, 0.125f));
+   cSpriteKeyWhite->setSize(Vector2(0.24f, 0.24f));
+   cSpriteKeyBlack->setSize(Vector2(0.24f, 0.24f));
+   cSpriteKeyPress->setSize(Vector2(0.24f, 0.24f));
+   cSpriteKeyPressBack->setSize(Vector2(0.24f, 0.24f));
+   cSpritePedalOn->setSize(Vector2(0.24f, 0.24f));
+   cSpritePedalOff->setSize(Vector2(0.24f, 0.24f));
+   cSpriteLoading->setSize(Vector2(0.125f, 0.125f));
    
    cTextModus->setPosition(-0.7f, 0.4f);
    cTextLoading->setPosition(-0.7f, 0.1f);
@@ -172,12 +177,12 @@ void GEStateSample::internalInit()
    mSoundGen = new MCSoundGenNative(1, mPianoRange.getSize(), false);
    mPiano->setSoundGen(mSoundGen);
    
-   GEContentData cScript;
-   GEDevice::readContentFile(GEContentType::GenericTextData, "scripts/score.piano.chopin", "txt", &cScript);
+   ContentData cScript;
+   Device::readContentFile(ContentType::GenericTextData, "scripts/score.piano.chopin", "txt", &cScript);
    mScore[0].loadScriptFromString(cScript.getData());
    cScript.unload();
 
-   GEDevice::readContentFile(GEContentType::GenericTextData, "scripts/score.piano.chopin2", "txt", &cScript);
+   Device::readContentFile(ContentType::GenericTextData, "scripts/score.piano.chopin2", "txt", &cScript);
    mScore[1].loadScriptFromString(cScript.getData());
    mScore[1].displace(1);
    cScript.unload();
@@ -185,24 +190,24 @@ void GEStateSample::internalInit()
    iCurrentScore = 0;
    mPiano->setScore(&mScore[iCurrentScore]);
    
-   mTimer.setCallbackTick(GEStateSampleCallbacks::TimerTick, mPiano);
+   mTimer.setCallbackTick(StateSampleCallbacks::TimerTick, mPiano);
    
    // set instrument callbacks
-   mPiano->setCallbackPlay(GEStateSampleCallbacks::PlayNote, this);
-   mPiano->setCallbackRelease(GEStateSampleCallbacks::ReleaseNote, this);
-   mPiano->setCallbackDamper(GEStateSampleCallbacks::Damper, this);
+   mPiano->setCallbackPlay(StateSampleCallbacks::PlayNote, this);
+   mPiano->setCallbackRelease(StateSampleCallbacks::ReleaseNote, this);
+   mPiano->setCallbackDamper(StateSampleCallbacks::Damper, this);
    
    // create music threads
-   GECreateThread(pLoadSamples, GEStateSampleThreads::LoadSamplesThread, this);
-   GECreateThread(pMusicTimerThread, GEStateSampleThreads::MusicTimerThread, 0);
+   GEThreadCreate(pLoadSamples, StateSampleThreads::LoadSamplesThread, this);
+   GEThreadCreate(pMusicTimerThread, StateSampleThreads::MusicTimerThread, 0);
 }
 
-void GEStateSample::release()
+void StateSample::release()
 {
    // wait until the music timer thread finishes
    bThreadEnd = true;
-   GEWaitForThread(pMusicTimerThread);
-   GEDestroyMutex(pTimerMutex);
+   GEThreadWait(pMusicTimerThread);
+   GEMutexDestroy(pTimerMutex);
    
    // release Modus objects
    delete mSoundGen;
@@ -224,36 +229,36 @@ void GEStateSample::release()
    delete cTextPlaying;
 }
 
-void GEStateSample::update(float DeltaTime)
+void StateSample::update(float DeltaTime)
 {
 }
 
-void GEStateSample::updateSamplesLoaded(unsigned int TotalSamples, unsigned int Loaded)
+void StateSample::updateSamplesLoaded(unsigned int TotalSamples, unsigned int Loaded)
 {
    iTotalSamples = TotalSamples;
    iSamplesLoaded = Loaded;
 }
 
-MCSoundGenAudio* GEStateSample::getSoundGen()
+MCSoundGenAudio* StateSample::getSoundGen()
 {
    return mSoundGen;
 }
 
-void GEStateSample::setIntensity(unsigned char Pitch, unsigned char Intensity)
+void StateSample::setIntensity(unsigned char Pitch, unsigned char Intensity)
 {
    iIntensity[Pitch - LOWEST_NOTE] = Intensity;
 }
 
-void GEStateSample::setDamper(bool On)
+void StateSample::setDamper(bool On)
 {
    bDamper = On;
    cSpritePedal = bDamper? cSpritePedalOn: cSpritePedalOff;
 }
 
-void GEStateSample::render()
+void StateSample::render()
 {
    // labels
-   cRender->useShaderProgram((unsigned int)GEShaderPrograms::Text);
+   cRender->useShaderProgram((unsigned int)ShaderPrograms::Text);
    cTextModus->setText("Modus");
    cRender->renderLabel(cTextModus);
    cTextModus->move(0.0f, -0.05f);
@@ -279,7 +284,7 @@ void GEStateSample::render()
       
       float fPosY = 0.0f;
       float fPosX = -0.675f;
-      cRender->useShaderProgram((unsigned int)GEShaderPrograms::HUD);
+      cRender->useShaderProgram((unsigned int)ShaderPrograms::HUD);
       
       for(unsigned int i = 1; i <= iPercentage / 5; i++)
       {
@@ -291,12 +296,12 @@ void GEStateSample::render()
       return;
    }
    
-   cRender->useShaderProgram((unsigned int)GEShaderPrograms::HUD);
+   cRender->useShaderProgram((unsigned int)ShaderPrograms::HUD);
 
    // piano keyboard
    float fPosY = -0.2f;
    float fKeyPosX;
-   float fWhiteWidth = 0.025f;
+   float fWhiteWidth = 0.03f;
    float fFirstKeyPosX = -fWhiteWidth * 26 + (fWhiteWidth / 2);  // number of white keys: 52, 52/2=26
 
    int iNote;
@@ -342,14 +347,14 @@ void GEStateSample::render()
       
       if(iIntensity[i] > 0)
       {
-         cSpriteKeyPress->setPosition(fKeyPosX, fPosY);
+         cSpriteKeyPress->setPosition(fKeyPosX - 0.002f, fPosY);
          cSpriteKeyPress->setOpacity(iIntensity[i] / 127.0f);
          cRender->renderSprite(cSpriteKeyPress);
       }
    }   
    
    // black keys
-   fPosY += 0.025f;
+   fPosY += 0.027f;
    fFirstKeyPosX = -fWhiteWidth * 26;
    
    for(i = 0; i < 88; i++)
@@ -389,18 +394,18 @@ void GEStateSample::render()
          cSpriteKeyPressBack->setPosition(fKeyPosX, fPosY + 0.025f);
          cRender->renderSprite(cSpriteKeyPressBack);
          
-         cSpriteKeyPress->setPosition(fKeyPosX, fPosY + 0.025f);
+         cSpriteKeyPress->setPosition(cSpriteKeyPressBack->getPosition());
          cSpriteKeyPress->setOpacity(iIntensity[i] / 127.0f);
          cRender->renderSprite(cSpriteKeyPress);
       }
    }
    
    // piano pedal
-   cSpritePedal->setPosition(0.0f, fPosY - 0.1f);
+   cSpritePedal->setPosition(0.0f, fPosY - 0.114f);
    cRender->renderSprite(cSpritePedal);
 }
 
-void GEStateSample::inputTouchBegin(int ID, const GEVector2& Point)
+void StateSample::inputTouchBegin(int ID, const Vector2& Point)
 {
    if(!bSamplesLoaded)
       return;
@@ -414,8 +419,8 @@ void GEStateSample::inputTouchBegin(int ID, const GEVector2& Point)
    mPiano->releaseAll();
    mPiano->setScore(&mScore[iCurrentScore]);
 
-   GELockMutex(pTimerMutex);
+   GEMutexLock(pTimerMutex);
    mTimer.reset();
    mTimer.start();
-   GEUnlockMutex(pTimerMutex);
+   GEMutexUnlock(pTimerMutex);
 }
