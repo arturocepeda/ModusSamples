@@ -233,6 +233,35 @@ void StateSample::update(float DeltaTime)
 {
 }
 
+void StateSample::pause()
+{
+   if(!bSamplesLoaded)
+      return;
+
+   mSoundGen->setDamper(false);
+   mSoundGen->releaseAllNotes();
+
+   GEMutexLock(pTimerMutex);
+   mTimer.stop();
+   GEMutexUnlock(pTimerMutex);
+
+   // make sure that all the currently sounding notes are faded-out
+   for(uint i = 0; i < M_TICKS_PER_BEAT; i++)
+      mSoundGen->update();
+}
+
+void StateSample::resume()
+{
+   if(!bSamplesLoaded)
+      return;
+
+   mSoundGen->setDamper(bDamper);
+
+   GEMutexLock(pTimerMutex);
+   mTimer.start();
+   GEMutexUnlock(pTimerMutex);
+}
+
 void StateSample::updateSamplesLoaded(unsigned int TotalSamples, unsigned int Loaded)
 {
    iTotalSamples = TotalSamples;

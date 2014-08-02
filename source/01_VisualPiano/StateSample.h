@@ -96,10 +96,13 @@ private:
 public:
    StateSample(RenderSystem* Render, AudioSystem* Audio, void* GlobalData);
    
-   void internalInit();
-   void update(float DeltaTime);
-   void render();
-   void release();
+   virtual void internalInit();
+   virtual void update(float DeltaTime);
+   virtual void render();
+   virtual void release();
+
+   virtual void pause();
+   virtual void resume();
    
    void updateSamplesLoaded(unsigned int TotalSamples, unsigned int Loaded);
 
@@ -108,7 +111,7 @@ public:
    void setIntensity(unsigned char Pitch, unsigned char Intensity);
    void setDamper(bool On);
    
-   void inputTouchBegin(int ID, const Vector2& Point);
+   virtual void inputTouchBegin(int ID, const Vector2& Point);
 };
 
 #endif
