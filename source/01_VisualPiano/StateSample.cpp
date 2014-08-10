@@ -41,7 +41,7 @@ GEThreadFunction(StateSampleThreads::LoadSamplesThread)
    MCSoundGenAudio* mSoundGen = cState->getSoundGen();
 
    ContentData cSamplePackData;
-   Device::readContentFile(ContentType::GenericBinaryData, "instruments/Piano", "msp", &cSamplePackData);
+   Device::readContentFile(ContentType::GenericBinaryData, "instruments", "Piano", "msp", &cSamplePackData);
    std::istringstream fStream(std::string(cSamplePackData.getData(), cSamplePackData.getDataSize()));
    mSoundGen->loadSamplePack(fStream, StateSampleCallbacks::SampleLoaded, pData);
    
@@ -178,11 +178,11 @@ void StateSample::internalInit()
    mPiano->setSoundGen(mSoundGen);
    
    ContentData cScript;
-   Device::readContentFile(ContentType::GenericTextData, "scripts/score.piano.chopin", "txt", &cScript);
+   Device::readContentFile(ContentType::GenericTextData, "scripts", "score.piano.chopin", "txt", &cScript);
    mScore[0].loadScriptFromString(cScript.getData());
    cScript.unload();
 
-   Device::readContentFile(ContentType::GenericTextData, "scripts/score.piano.chopin2", "txt", &cScript);
+   Device::readContentFile(ContentType::GenericTextData, "scripts", "score.piano.chopin2", "txt", &cScript);
    mScore[1].loadScriptFromString(cScript.getData());
    mScore[1].displace(1);
    cScript.unload();
