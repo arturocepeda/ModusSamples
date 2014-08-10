@@ -34,6 +34,7 @@ using namespace GE::States;
 RenderSystem* cRender;
 AudioSystem* cAudio;
 State* cStates[NUM_STATES];
+bool bInitialized = false;
 
 Core::Timer cTimer;
 double dTime;
@@ -46,6 +47,8 @@ extern "C"
 {
    JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_Initialize(JNIEnv* env, jobject obj, jint width, jint height);
    JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_UpdateFrame(JNIEnv* env, jobject obj);
+   JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_Pause(JNIEnv* env, jobject obj);
+   JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_Resume(JNIEnv* env, jobject obj);
    JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_InputTouchDown(JNIEnv* env, jclass clazz, jint index, jfloat x, jfloat y);
    JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_InputTouchMove(JNIEnv* env, jclass clazz, jint index, jfloat x, jfloat y);
    JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_InputTouchUp(JNIEnv* env, jclass clazz, jint index, jfloat x, jfloat y);
@@ -56,6 +59,9 @@ extern "C"
 
 JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_Initialize(JNIEnv* env, jobject obj, jint width, jint height)
 {
+   if(bInitialized)
+      return;
+
    // screen size
    Device::ScreenWidth = width;
    Device::ScreenHeight = height;
@@ -80,6 +86,9 @@ JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_Initialize(JNIEnv* en
    // start the timer
    cTimer.start();
    dTime = 0.0;
+
+   // set the initialized flag
+   bInitialized = true;
 }
 
 void selectState(unsigned int State)
@@ -106,6 +115,17 @@ JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_UpdateFrame(JNIEnv* e
    // render
    cRender->renderBegin();
    cStates[iCurrentState]->render();
+}
+
+JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_Pause(JNIEnv* env, jobject obj)
+{
+   cStates[iCurrentState]->pause();
+}
+
+JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_Resume(JNIEnv* env, jobject obj)
+{
+   if(bInitialized)
+      cStates[iCurrentState]->resume();
 }
 
 JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_InputTouchDown(JNIEnv* env, jclass clazz, jint index, jfloat x, jfloat y)

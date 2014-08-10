@@ -22,6 +22,8 @@ public class ModusLib
       
    public static native void Initialize(int width, int height);
    public static native void UpdateFrame();
+   public static native void Pause();
+   public static native void Resume();
     
    public static native void CreateAssetManager(AssetManager assetManager);
 
