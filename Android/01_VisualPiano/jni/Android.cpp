@@ -9,11 +9,13 @@
 //
 ////////////////////////////////////////////////////////////////////////
 
+
 #include <jni.h>
-#include <android/log.h>
 #include <stdio.h>
 #include <memory>
 #include <typeinfo>
+#include <vector>
+
 #include <cpu-features.h>
 
 #include "config.h"
@@ -33,15 +35,18 @@ using namespace GE::States;
 
 RenderSystem* cRender;
 AudioSystem* cAudio;
-State* cStates[NUM_STATES];
+std::vector<State*> cStates;
 bool bInitialized = false;
 
 Core::Timer cTimer;
 double dTime;
 
 int iCurrentState;
-int iFingerID[MAX_FINGERS];
-Vector2 vFingerPosition[MAX_FINGERS];
+int iFingerID[GE_MAX_FINGERS];
+Vector2 vFingerPosition[GE_MAX_FINGERS];
+
+Line* cPixelToScreenX;
+Line* cPixelToScreenY;
 
 extern "C"
 {
@@ -66,23 +71,37 @@ JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_Initialize(JNIEnv* en
    Device::ScreenWidth = width;
    Device::ScreenHeight = height;
 
+   // device orientation
+#ifdef GE_ORIENTATION_PORTRAIT
+   Device::Orientation = DOPortrait;
+#else
+   Device::Orientation = DOLandscape;
+#endif
+
    // IDs for touch management
-   for(int i = 0; i < MAX_FINGERS; i++)
+   for(int i = 0; i < GE_MAX_FINGERS; i++)
       iFingerID[i] = -1;
+
+   cPixelToScreenX = new Line(0.0f, -1.0f, Device::ScreenWidth, 1.0f);
+   cPixelToScreenY = new Line(0.0f, Device::getAspectRatio(), Device::ScreenHeight, -Device::getAspectRatio());
    
     // initialize rendering system
    cRender = new RenderSystemES20();
    cRender->setBackgroundColor(Color(0.5f, 0.5f, 1.0f));
-
+   
+   // initialize audio system
+   //cAudio = new AudioSystemOpenSL();
+   //cAudio->init();
+   
    // create states
-   cStates[0] = new StateSample(cRender, cAudio, (void*)0);
+   cStates.push_back(new StateSample(cRender, 0, (void*)0));
    // ...
    // ...
    
    // select the first state   
    iCurrentState = 0;
    cStates[0]->init();
-
+   
    // start the timer
    cTimer.start();
    dTime = 0.0;
@@ -128,15 +147,19 @@ JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_Resume(JNIEnv* env, j
       cStates[iCurrentState]->resume();
 }
 
+GE::Vector2 pixelToScreen(const GE::Vector2& vPixelPosition)
+{
+   return GE::Vector2((float)cPixelToScreenX->y(vPixelPosition.X), (float)cPixelToScreenY->y(vPixelPosition.Y));
+}
+
 JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_InputTouchDown(JNIEnv* env, jclass clazz, jint index, jfloat x, jfloat y)
 {
-   for(int i = 0; i < MAX_FINGERS; i++)
+   for(int i = 0; i < GE_MAX_FINGERS; i++)
    {
       if(iFingerID[i] == -1)
       {
          iFingerID[i] = index;
-         vFingerPosition[i].X = x;
-         vFingerPosition[i].Y = y;
+         vFingerPosition[i] = pixelToScreen(Vector2(x, y));
          cStates[iCurrentState]->inputTouchBegin(i, vFingerPosition[i]);
          break;
       }
@@ -145,13 +168,12 @@ JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_InputTouchDown(JNIEnv
 
 JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_InputTouchMove(JNIEnv* env, jclass clazz, jint index, jfloat x, jfloat y)
 {
-   for(int i = 0; i < MAX_FINGERS; i++)
+   for(int i = 0; i < GE_MAX_FINGERS; i++)
    {
       if(iFingerID[i] == index)
       {
-         Vector2 vPreviousPosition(vFingerPosition[i]);
-         vFingerPosition[i].X = x;
-         vFingerPosition[i].Y = y;
+         Vector2 vPreviousPosition = vFingerPosition[i];
+         vFingerPosition[i] = pixelToScreen(Vector2(x, y));
          cStates[iCurrentState]->inputTouchMove(i, vPreviousPosition, vFingerPosition[i]);
          break;
       }
@@ -160,13 +182,12 @@ JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_InputTouchMove(JNIEnv
 
 JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_InputTouchUp(JNIEnv* env, jclass clazz, jint index, jfloat x, jfloat y)
 {
-   for(int i = 0; i < MAX_FINGERS; i++)
+   for(int i = 0; i < GE_MAX_FINGERS; i++)
    {
       if(iFingerID[i] == index)
       {
          iFingerID[i] = -1;
-         vFingerPosition[i].X = x;
-         vFingerPosition[i].Y = y;
+         vFingerPosition[i] = pixelToScreen(Vector2(x, y));
          cStates[iCurrentState]->inputTouchEnd(i, vFingerPosition[i]);
          break;
       }
@@ -187,7 +208,7 @@ const float AccelFactor = 0.01f;
 
 JNIEXPORT void JNICALL Java_com_Modus_VisualPiano_ModusLib_UpdateAccelerometerStatus(JNIEnv* env, jclass clazz, jfloat x, jfloat y, jfloat z)
 {
-   if(cStates[iCurrentState])
+   if(bInitialized)
       cStates[iCurrentState]->updateAccelerometerStatus(Vector3(x * -AccelFactor, y * -AccelFactor, z * AccelFactor));
 }
 

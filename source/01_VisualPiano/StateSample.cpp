@@ -113,7 +113,7 @@ StateSample::StateSample(RenderSystem* Render, AudioSystem* Audio, void* GlobalD
 void StateSample::internalInit()
 {   
    cRender->setBackgroundColor(Color(0.8f, 0.8f, 1.0f));
-   cRender->set2D(false);
+   cRender->set2D();
    
    iTotalSamples = 0;
    iSamplesLoaded = 0;
