@@ -1,14 +1,13 @@
 
-//////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
 //
-//  Arturo Cepeda Pérez
+//  Modus
 //  C++ Music Library
+//  Sample Application
 //
-//  Sample application
+//  Arturo Cepeda
 //
-//  --- ViewController.mm ---
-//
-//////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
 
 
 #import "ViewController.h"
@@ -17,28 +16,42 @@
 #import "GEAudioSystemOpenAL.h"
 #import "GEState.h"
 #import "GETimer.h"
+#import "GEDevice.h"
+
+#import "config.h"
 
 #import "StateSample.h"
 
 
+using namespace GE;
+using namespace GE::Core;
+using namespace GE::Rendering;
+using namespace GE::Audio;
+using namespace GE::States;
+
+
 @interface ViewController () <UIAccelerometerDelegate>
 {
-   // Rendering system
-   GE::Rendering::RenderSystem* cRender;
+   // Render system
+   RenderSystemES20* cRender;
    
    // Audio system
-   GE::Audio::AudioSystem* cAudio;
+   AudioSystemOpenAL* cAudio;
+   unsigned int iAudioUpdateFrame;
    
    // State management
-   GE::States::State* cStates[NUM_STATES];
+   std::vector<State*> cStates;
    int iCurrentState;
    
    // Input management
-   int iFingerID[MAX_FINGERS];
+   int iFingerID[GE_MAX_FINGERS];
    UIAccelerometer* uiAccel;
    
+   Line* cPixelToScreenX;
+   Line* cPixelToScreenY;
+   
    // Timer
-   GE::Core::Timer cTimer;
+   Core::Timer cTimer;
    double dTime;
 }
 
@@ -46,7 +59,8 @@
 @property (strong, nonatomic) GLKBaseEffect* effect;
 
 -(void) accelerometer:(UIAccelerometer*)accelerometer didAccelerate:(UIAcceleration*)acceleration;
--(void) selectState:(unsigned int) iState;
+-(void) selectState:(unsigned int)state;
+-(Vector2) pixelToScreen:(const GE::Vector2&)pixelPosition;
 
 @end
 
@@ -66,7 +80,8 @@
 -(void) viewDidLoad
 {
    [super viewDidLoad];
-    
+
+   // initialize OpenGL
    self.context = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
 
    if(!self.context) 
@@ -75,12 +90,11 @@
    GLKView* view = (GLKView*)self.view;
    view.context = self.context;
    view.drawableDepthFormat = GLKViewDrawableDepthFormat24;
-   
-   // init OpenGL
+
    [EAGLContext setCurrentContext:self.context];
    
    // set frames per second
-   self.preferredFramesPerSecond = FPS;
+   self.preferredFramesPerSecond = GE_FPS;
    
    // enable multiple touch
    self.view.userInteractionEnabled = YES;
@@ -88,28 +102,52 @@
    self.view.exclusiveTouch = YES;
    
    // IDs for touch management
-   for(int i = 0; i < MAX_FINGERS; i++)
+   for(int i = 0; i < GE_MAX_FINGERS; i++)
       iFingerID[i] = 0;
    
-#ifdef USE_ACCELEROMETER
+   // device orientation
+#ifdef GE_ORIENTATION_PORTRAIT
+   Device::Orientation = DOPortrait;
+#else
+   Device::Orientation = DOLandscape;
+#endif
+   
+   // pixel space to screen space
+   if(Device::Orientation == DOPortrait)
+   {
+      cPixelToScreenX = new Line(0.0f, -1.0f, Device::getTouchPadWidth(), 1.0f);
+      cPixelToScreenY = new Line(0.0f, Device::getAspectRatio(), Device::getTouchPadHeight(), -Device::getAspectRatio());
+   }
+   else
+   {
+      cPixelToScreenX = new Line(0.0f, -1.0f, Device::getTouchPadHeight(), 1.0f);
+      cPixelToScreenY = new Line(0.0f, Device::getAspectRatio(), Device::getTouchPadWidth(), -Device::getAspectRatio());
+   }
+   
+#ifdef GE_USE_ACCELEROMETER
    // accelerometer
    uiAccel = [UIAccelerometer sharedAccelerometer];
-   uiAccel.updateInterval = ACCELEROMETER_UPDATE;
+   uiAccel.updateInterval = GE_ACCELEROMETER_UPDATE;
    uiAccel.delegate = self;
 #endif
    
    // initialize rendering system
-   cRender = new GE::Rendering::RenderSystemES20();
-   cRender->setBackgroundColor(GE::Color(0.5f, 0.5f, 1.0f));
+   cRender = new RenderSystemES20();
+   cRender->setBackgroundColor(Color(0.5f, 0.5f, 1.0f));
    
    // initialize audio system
-   cAudio = new GE::Audio::AudioSystemOpenAL();
+   cAudio = new AudioSystemOpenAL();
    cAudio->init(0, 0);
+   iAudioUpdateFrame = 0;
    
    // create states
-   cStates[0] = (GE::States::State*)new StateSample(cRender, 0, 0);
+   cStates.push_back(new StateSample(cRender, cAudio, 0));
    // ...
    // ...
+   
+   // start the timer
+   cTimer.start();
+   dTime = 0.0;
    
    // select the first state   
    iCurrentState = 0;
@@ -127,8 +165,21 @@
 
    self.context = nil;
    
+   delete cPixelToScreenX;
+   delete cPixelToScreenY;
+   
+   while(!cStates.empty())
+   {
+      delete cStates.back();
+      cStates.pop_back();
+   }
+   
    // release rendering system
    delete cRender;
+   
+   // release audio system
+   cAudio->release();
+   delete cAudio;
 }
 
 -(void) didReceiveMemoryWarning
@@ -138,19 +189,15 @@
 
 -(BOOL) shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
 {
-#ifdef PORTRAIT_UP
+#ifdef GE_ORIENTATION_PORTRAIT
    if(interfaceOrientation == UIInterfaceOrientationPortrait)
       return YES;
-#endif
-#ifdef PORTRAIT_DOWN
    if(interfaceOrientation == UIInterfaceOrientationPortraitUpsideDown)
       return YES;
 #endif
-#ifdef LANDSCAPE_HOME_LEFT
+#ifdef GE_ORIENTATION_LANDSCAPE
    if(interfaceOrientation == UIInterfaceOrientationLandscapeRight)
       return YES;
-#endif
-#ifdef LANDSCAPE_HOME_RIGHT
    if(interfaceOrientation == UIInterfaceOrientationLandscapeLeft)
       return YES;
 #endif   
@@ -160,13 +207,13 @@
 
 -(void) accelerometer:(UIAccelerometer*)accelerometer didAccelerate:(UIAcceleration*)acceleration
 {
-   cStates[iCurrentState]->updateAccelerometerStatus(GE::Vector3(acceleration.x, acceleration.y, acceleration.z));
+   cStates[iCurrentState]->updateAccelerometerStatus(Vector3(acceleration.x, acceleration.y, acceleration.z));
 }
 
--(void) selectState:(unsigned int)iState
+-(void) selectState:(unsigned int)state
 {
    cStates[iCurrentState]->release();
-   iCurrentState = iState;
+   iCurrentState = state;
    cStates[iCurrentState]->init();
 }
 
@@ -180,6 +227,15 @@
    // state update
    cStates[iCurrentState]->update(fDeltaTime);
    
+   // audio system update
+   iAudioUpdateFrame++;
+   
+   if(iAudioUpdateFrame == GE_AUDIO_UPDATE_FRAMES)
+   {
+      iAudioUpdateFrame = 0;
+      cAudio->update();
+   }
+    
    // state change request
    if(cStates[iCurrentState]->getNextState() >= 0)
       [self selectState:cStates[iCurrentState]->getNextState()];
@@ -189,6 +245,12 @@
 {
    cRender->renderBegin();
    cStates[iCurrentState]->render();
+   [self.context presentRenderbuffer:GL_RENDERBUFFER];
+}
+
+-(Vector2) pixelToScreen:(const GE::Vector2&)pixelPosition
+{
+   return Vector2((float)cPixelToScreenX->y(pixelPosition.X), (float)cPixelToScreenY->y(pixelPosition.Y));
 }
 
 -(void) touchesBegan:(NSSet*)touches withEvent:(UIEvent*)event
@@ -197,14 +259,14 @@
    
    for(UITouch* uiTouch in uiTouchesList)
    {
-      for(int i = 0; i < MAX_FINGERS; i++)
+      for(int i = 0; i < GE_MAX_FINGERS; i++)
       {
          if(iFingerID[i] == 0)
          {
             CGPoint cgPoint = [uiTouch locationInView: self.view];
             
             iFingerID[i] = (int)uiTouch;
-            cStates[iCurrentState]->inputTouchBegin(i, GE::Vector2(cgPoint.x, cgPoint.y));
+            cStates[iCurrentState]->inputTouchBegin(i, [self pixelToScreen: Vector2(cgPoint.x, cgPoint.y)]);
             
             break;
          }
@@ -218,7 +280,7 @@
    
    for(UITouch* uiTouch in uiTouchesList)
    {
-      for(int i = 0; i < MAX_FINGERS; i++)
+      for(int i = 0; i < GE_MAX_FINGERS; i++)
       {
          if(iFingerID[i] == (int)uiTouch)
          {
@@ -226,9 +288,8 @@
             CGPoint cgCurrentPoint = [uiTouch locationInView: self.view];
             
             cStates[iCurrentState]->inputTouchMove(i,
-                                                   GE::Vector2(cgPreviousPoint.x, cgPreviousPoint.y),
-                                                   GE::Vector2(cgCurrentPoint.x, cgCurrentPoint.y));
-            
+                                                   [self pixelToScreen: Vector2(cgPreviousPoint.x, cgPreviousPoint.y)],
+                                                   [self pixelToScreen: Vector2(cgCurrentPoint.x, cgCurrentPoint.y)]);            
             break;
          }
       }
@@ -241,14 +302,14 @@
    
    for(UITouch* uiTouch in uiTouchesList)
    {
-      for(int i = 0; i < MAX_FINGERS; i++)
+      for(int i = 0; i < GE_MAX_FINGERS; i++)
       {
          if(iFingerID[i] == (int)uiTouch)
          {
             CGPoint cgPoint = [uiTouch locationInView: self.view];
             
             iFingerID[i] = 0;
-            cStates[iCurrentState]->inputTouchEnd(i, GE::Vector2(cgPoint.x, cgPoint.y));
+            cStates[iCurrentState]->inputTouchEnd(i, [self pixelToScreen: Vector2(cgPoint.x, cgPoint.y)]);
             
             break;
          }
